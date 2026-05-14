@@ -40,4 +40,4 @@ El trabajo a partir de aquí se divide en los siguiente.
 
 1. Clona este repositorio:
    ```bash
-   git clone <url>
+   git clone <https://github.com/RommelVargas/IoT_Agro.git>
