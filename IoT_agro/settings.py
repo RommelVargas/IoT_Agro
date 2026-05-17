@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'api',
     'core',
     'ingestor',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
