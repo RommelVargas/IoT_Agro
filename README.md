@@ -19,9 +19,7 @@ Hasta el momento, hemos configurado los cimientos del servidor en Django y la pu
 El trabajo a partir de aquí se divide en los siguiente.
 
 ### 1. App `core`
-* [ ] Programar las funciones matemáticas (Balances y Ecuaciones) en un archivo `engine.py`.
-* [ ] Implementar ecuación de Magnus-Tetens para calcular el Punto de Rocío ($T_{dp}$).
-* [ ] Desarrollar la función de costo: Traducción de humedad a pérdida de peso comercial y conversión a dólares (USD).
+(Cambios subidos, Se implementó un motor termodinámico en core/engine.py que calcula automáticamente el punto de rocío, la humedad de equilibrio y la merma financiera por sobre-secado del café mediante balances de masa. Este motor se acopló directamente al endpoint de recepción en api/views.py, por lo que ahora, cada vez que un sensor guarda una lectura (serializer.save()), el sistema procesa los datos en tiempo real e inyecta los resultados físicos y económicos dentro de la misma respuesta JSON bajo el bloque "motor_termodinamico")
 
 ### 2. Endpoints de Salida (Pasaporte Digital) - App `api`
 * [ ] Crear una petición GET (ej. `/api/v1/lotes/<id>/pasaporte`) que empaquete las últimas lecturas y envíe un JSON limpio para la PWA.
