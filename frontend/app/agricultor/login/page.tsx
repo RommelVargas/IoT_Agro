@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { findAgricultorByCredentials, MOCK_SESSION_KEY } from '@/lib/mock-data'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -14,14 +15,15 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
-    // TODO: conectar con endpoint de auth de Django cuando esté listo
-    // Por ahora simulamos login exitoso con cualquier credencial
     await new Promise(r => setTimeout(r, 800))
-    if (!email || !password) {
-      setError('Completá todos los campos.')
+    // TODO: reemplazar con endpoint Django cuando esté listo
+    const agricultor = findAgricultorByCredentials(email, password)
+    if (!agricultor) {
+      setError('Credenciales incorrectas o usuario inactivo.')
       setLoading(false)
       return
     }
+    localStorage.setItem(MOCK_SESSION_KEY, String(agricultor.id))
     router.push('/agricultor/dashboard')
   }
 

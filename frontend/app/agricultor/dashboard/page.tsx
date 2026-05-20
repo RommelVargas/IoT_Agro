@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { mockLotes, mockLecturasPerLote, mockAlertas, mockDispositivos } from '@/lib/mock-data'
+import { mockLotes, mockLecturasPerLote, mockAlertas, mockDispositivos, mockAgricultores, MOCK_SESSION_KEY } from '@/lib/mock-data'
 
 // ── Mini chart using SVG ──────────────────────────────────────────────────────
 function SparkLine({ data, color = 'var(--green-500)', height = 48 }: {
@@ -122,6 +122,16 @@ export default function DashboardPage() {
     return () => clearInterval(id)
   }, [])
 
+  // ── Agricultor logueado desde localStorage ─────────────────────────────────
+  const [agricultor, setAgricultor] = useState(mockAgricultores[0])
+
+  useEffect(() => {
+    const rawId = localStorage.getItem(MOCK_SESSION_KEY)
+    const id = rawId ? Number(rawId) : 1
+    const found = mockAgricultores.find(a => a.id === id)
+    if (found) setAgricultor(found)
+  }, [])
+
   const lecturas = mockLecturasPerLote[selectedLoteId] ?? mockLecturasPerLote[1]
   const selectedLote = mockLotes.find(l => l.id === selectedLoteId) ?? mockLotes[0]
   const ultima = lecturas[lecturas.length - 1]
@@ -159,7 +169,7 @@ export default function DashboardPage() {
             background: 'var(--green-glow)', border: '1px solid var(--border-strong)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontWeight: 700, fontSize: '0.875rem', color: 'var(--green-400)',
-          }}>JA</div>
+          }}>{agricultor.avatar}</div>
         </div>
       </nav>
 
@@ -167,7 +177,7 @@ export default function DashboardPage() {
         {/* Page title */}
         <div className="fade-in" style={{ marginBottom: '1.5rem' }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-            Finca Las Colinas
+            {agricultor.finca}
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
             {new Date().toLocaleDateString('es-NI', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}

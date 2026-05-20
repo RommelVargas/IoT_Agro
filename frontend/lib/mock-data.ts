@@ -1,5 +1,8 @@
 // Mock data — reemplazar con llamadas reales a la API cuando estén los endpoints GET
 
+// ── Clave de sesión compartida (login → dashboard) ────────────────────────────
+export const MOCK_SESSION_KEY = 'iot_agro_agricultor_id'
+
 // ── Agricultores ──────────────────────────────────────────────────────────────
 export const mockAgricultores = [
   {
@@ -12,6 +15,10 @@ export const mockAgricultores = [
     verificado: true,
     lotes_completados: 18,
     avatar: 'LR',
+    activo: true,
+    // Credenciales de demo — en producción esto viene del backend
+    _email: 'lopez@finca.com',
+    _password: 'demo1234',
   },
   {
     id: 2,
@@ -23,8 +30,18 @@ export const mockAgricultores = [
     verificado: true,
     lotes_completados: 9,
     avatar: 'CN',
+    activo: false,
+    _email: 'cafenorte@finca.com',
+    _password: 'demo1234',
   },
 ]
+
+// ── Auth mock — devuelve el agricultor si las credenciales coinciden y está activo
+export function findAgricultorByCredentials(email: string, password: string) {
+  return mockAgricultores.find(
+    a => a._email === email && a._password === password && a.activo
+  ) ?? null
+}
 
 // ── Lotes ─────────────────────────────────────────────────────────────────────
 export const mockLotes = [
