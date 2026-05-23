@@ -1,6 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { 
+  ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
+} from 'recharts'
 import { mockLotes, mockLecturasPerLote, mockAlertas, mockDispositivos, mockAgricultores, MOCK_SESSION_KEY } from '@/lib/mock-data'
 
 // ── Mini chart using SVG ──────────────────────────────────────────────────────
@@ -115,7 +118,7 @@ function SecadoProgress({ lote, selected, onClick }: {
 export default function DashboardPage() {
   const [tick, setTick] = useState(0)
   const [selectedLoteId, setSelectedLoteId] = useState(mockLotes[0].id)
-  const [chartMetric, setChartMetric] = useState<'temp' | 'humedad'>('temp')
+  const [chartMetric, setChartMetric] = useState<'temp' | 'humedad'>('humedad')
 
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 5000)
@@ -134,13 +137,38 @@ export default function DashboardPage() {
 
   const lecturas = mockLecturasPerLote[selectedLoteId] ?? mockLecturasPerLote[1]
   const selectedLote = mockLotes.find(l => l.id === selectedLoteId) ?? mockLotes[0]
-  const ultima = lecturas[lecturas.length - 1]
+  
+  // Aquí es donde sucede la magia: tomamos la última lectura simulada
+  const ultima = lecturas[lecturas.length - 1] 
 
   const tempData    = lecturas.map(l => Number(l.temp_ambiente.toFixed(1)))
   const humedadData = lecturas.map(l => Number(l.humedad_relativa.toFixed(1)))
-  const chartData   = chartMetric === 'temp' ? tempData : humedadData
+  
+  // 🔥 PREPARAMOS LOS DATOS COMBINADOS PARA RECHARTS 🔥
+  const rechartsData = lecturas.map(l => {
+    let perdidaFisica = 0;
+    if (l.humedad_estimada < 12.0) {
+      perdidaFisica = (12.0 - l.humedad_estimada) * 850; 
+    }
+
+    let perdidaCalidad = 0;
+    if (l.lluvia && l.humedad_estimada > 12.5) {
+      perdidaCalidad = 3500; 
+    }
+
+    const dineroTotalPerdido = perdidaFisica + perdidaCalidad;
+
+    return {
+      hora: l.hora,
+      temp: Number(l.temp_ambiente.toFixed(1)),
+      humedad: Number(l.humedad_estimada.toFixed(1)), 
+      dinero: dineroTotalPerdido > 0 ? Number(dineroTotalPerdido.toFixed(2)) : 0
+    }
+  });
+
   const chartColor  = chartMetric === 'temp' ? 'var(--amber)' : 'var(--blue)'
-  const chartLabel  = chartMetric === 'temp' ? 'Temperatura' : 'Humedad Relativa'
+  const chartLabel  = chartMetric === 'temp' ? 'Temperatura vs Devaluación' : 'Humedad vs Devaluación'
+  const unitLabel   = chartMetric === 'temp' ? '°C' : '%'
 
   const totalQQ  = mockLotes.filter(l => l.esta_activo).reduce((s, l) => s + l.peso_inicial_qq, 0)
   const valorUSD = mockLotes.filter(l => l.esta_activo).reduce((s, l) => s + l.peso_inicial_qq * l.precio_mercado_actual, 0)
@@ -185,7 +213,7 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* KPI strip */}
+        {/* KPI strip: reaccionan a la `ultima` lectura del lote seleccionado */}
         <div className="grid-4 fade-in fade-in-delay-1" style={{ marginBottom: '1.5rem' }}>
           <MetricCard
             label="Temperatura Ambiente"
@@ -227,7 +255,6 @@ export default function DashboardPage() {
           {/* Left */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-            {/* Estado de secado — clic para seleccionar lote del gráfico */}
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                 <h2 className="text-title">Estado de Secado</h2>
@@ -247,9 +274,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Chart con selector de lote y métrica */}
             <div className="card">
-              {/* Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
                 <div>
                   <h2 className="text-title" style={{ marginBottom: '0.25rem' }}>
@@ -260,7 +285,6 @@ export default function DashboardPage() {
                   </p>
                 </div>
 
-                {/* Metric toggle */}
                 <div style={{
                   display: 'flex', gap: '0.375rem',
                   background: 'var(--bg-surface)', padding: '3px', borderRadius: 8,
@@ -289,7 +313,6 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Lote pills */}
               <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
                 {mockLotes.map(l => (
                   <button
@@ -310,20 +333,57 @@ export default function DashboardPage() {
                 ))}
               </div>
 
-              {/* Chart */}
-              <div style={{ position: 'relative', height: 120 }}>
-                <SparkLine data={chartData} color={chartColor} height={120} />
-                <div style={{
-                  position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%',
-                  background: 'linear-gradient(to top, var(--bg-card), transparent)',
-                  pointerEvents: 'none',
-                }} />
-              </div>
-              <div style={{
-                display: 'flex', justifyContent: 'space-between',
-                marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--text-muted)',
-              }}>
-                {['00:00', '06:00', '12:00', '18:00', '23:00'].map(h => <span key={h}>{h}</span>)}
+              <div style={{ width: '100%', height: 320 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={rechartsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="hora" stroke="var(--text-muted)" fontSize={12} tickLine={false} />
+                    
+                    <YAxis 
+                      yAxisId="left" 
+                      stroke={chartColor}
+                      unit={unitLabel}
+                      fontSize={12} 
+                      tickLine={false}
+                    />
+                    
+                    <YAxis 
+                      yAxisId="right" 
+                      orientation="right" 
+                      stroke="var(--red)" 
+                      unit="$" 
+                      fontSize={12} 
+                      tickLine={false}
+                    />
+                    
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '8px' }}
+                      itemStyle={{ fontWeight: 600 }}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: '10px' }}/>
+
+                    <Area
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="dinero"
+                      name="Devaluación (USD)"
+                      fill="var(--red-glow)"
+                      stroke="var(--red)"
+                      strokeWidth={2}
+                    />
+                    
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey={chartMetric}
+                      name={chartMetric === 'temp' ? 'Temperatura (°C)' : 'Humedad del Grano (%)'}
+                      stroke={chartColor}
+                      strokeWidth={3}
+                      dot={false}
+                      activeDot={{ r: 6, fill: chartColor }}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
               </div>
             </div>
 
