@@ -77,6 +77,16 @@ Luego abrí [http://localhost:3000](http://localhost:3000) en tu navegador.
 
 > ℹ️ Si preferís usar `npm` directamente, reemplazá `pnpm install` por `npm install` y `pnpm run dev` por `npm run dev`.
 
+Cambios en las gráficas:
+Dependencias
+Para la visualización de datos, hemos integrado `recharts`, que permite representar el comportamiento del secado y las variables financieras.
+
+Para instalar, ejecuta:
+npm install recharts
+
+- Arquitectura de Visualización: Implementación de `ComposedChart` para gráficos híbridos, permitiendo superponer el comportamiento de variables ambientales (Temperatura/Humedad) con métricas financieras (Devaluación) en un mismo eje temporal.
+- Arquitectura Basada en Engine: Se refactorizó el sistema delegando toda la lógica de negocio (cálculo de calidad, mermas y devaluación) al `engine.py`, permitiendo que el Frontend funcione como un visualizador de datos procesados  para garantizar consistencia entre el Dashboard y la parte visual(aun no se tocó nada del pasaporte del agricultor ni del comprador).
+- Optimización de Componentes: Los componentes `MetricCard` y `SecadoProgress` ahora reaccionan en tiempo real a los cambios de estado del lote seleccionado, mejorando la experiencia de monitoreo.
 ---
 
 ## Usa este proyecto en tu máquina
