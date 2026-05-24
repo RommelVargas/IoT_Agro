@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import { mockLotes, mockAgricultores } from '@/lib/mock-data'
+import { mockLotes, mockAgricultores, mockLecturasPerLote } from '@/lib/mock-data'
 
 function QualityBadge({ calidad }: { calidad: string }) {
   const colors: Record<string, { bg: string; text: string; border: string }> = {
@@ -38,7 +38,6 @@ function StarRating({ rating }: { rating: number }) {
   )
 }
 
-// ── Tooltip ──────────────────────────────────────────────────────────────────
 function Tooltip({ tip, children }: { tip: string; children: React.ReactNode }) {
   return (
     <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}
@@ -81,16 +80,32 @@ const VARIEDAD_INFO: Record<string, string> = {
   'Honey Maduro': 'Semi-lavado: se deja algo de mucílago en el grano al secar. Equilibrio entre sabor limpio y frutal. Alta demanda en mercados especiales.',
 }
 
+// Actualizado a la matriz de calidad real
 const CALIDAD_INFO: Record<string, string> = {
-  'A+': 'Excelente. Secado ultra-uniforme, varianza térmica mínima y humedad perfecta (10-11%). Apto para mercados de especialidad premium.',
-  'A': 'Muy bueno. Proceso de secado consistente y humedad dentro del rango ideal. Estándar de exportación.',
-  'B': 'Bueno. Algunos picos de temperatura durante el secado. Apto para exportación con descuento menor.',
-  'C': 'Aceptable. Varianza alta en el proceso. Posibles defectos menores. Para mercado local o blends.',
+  'A+': 'Excelente (11.0% - 12.2%). Secado perfecto, sin riesgo de hongos. Calidad premium de exportación.',
+  'A': 'Muy bueno (10.5% - 12.5%). Ligeramente fuera del rango óptimo, pero mantiene calidad de especialidad.',
+  'B': 'Comercial (9.5% - 13.5%). Penalizado por sobre-secado o humedad alta. Uso en mezclas o consumo estándar.',
+  'C': 'Rechazo (>60% riesgo). Daño por fermentación/lluvia o desecación grave. Mercado local.',
 }
 
 function LoteCard({ lote }: { lote: typeof mockLotes[0] }) {
-  const valor = (lote.peso_inicial_qq * lote.precio_mercado_actual).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
   const agricultor = mockAgricultores.find(a => a.id === lote.agricultor_id)
+  
+  // Conectamos la tarjeta al historial de la simulación
+  const lecturas = mockLecturasPerLote[lote.id] ?? mockLecturasPerLote[1]
+  const ultimaLectura = lecturas[lecturas.length - 1]
+  const humedadActual = ultimaLectura.humedad_estimada
+  
+  // Calculamos la calidad en base a la simulación dinámica
+  let calidadReal = "C"
+  if (humedadActual >= 11.0 && humedadActual <= 12.2) calidadReal = "A+"
+  else if (humedadActual >= 10.5 && humedadActual <= 12.5) calidadReal = "A"
+  else if (humedadActual >= 9.5 && humedadActual <= 13.5) calidadReal = "B"
+
+  // Calculamos el valor descontando la devaluación real
+  const valorIdeal = lote.peso_inicial_qq * lote.precio_mercado_actual
+  const valorFinal = Math.max(0, valorIdeal - ultimaLectura.devaluacion)
+  const valorFormateado = valorFinal.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 
   return (
     <Link href={`/comprador/lotes/${lote.id}`} id={`lote-card-${lote.id}`}>
@@ -124,8 +139,8 @@ function LoteCard({ lote }: { lote: typeof mockLotes[0] }) {
               )}
             </div>
           </div>
-          <Tooltip tip={CALIDAD_INFO[lote.calidad] ?? 'Calificación de calidad basada en el proceso de secado.'}>
-            <QualityBadge calidad={lote.calidad} />
+          <Tooltip tip={CALIDAD_INFO[calidadReal] ?? 'Calificación de calidad basada en la simulación IoT.'}>
+            <QualityBadge calidad={calidadReal} />
           </Tooltip>
         </div>
 
@@ -159,7 +174,7 @@ function LoteCard({ lote }: { lote: typeof mockLotes[0] }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <StarRating rating={agricultor.rating} />
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                  ({agricultor.reviews} reseñas · {agricultor.lotes_completados} lotes)
+                  ({agricultor.reviews} reseñas)
                 </span>
               </div>
             </div>
@@ -172,22 +187,22 @@ function LoteCard({ lote }: { lote: typeof mockLotes[0] }) {
             {
               label: 'Peso',
               value: `${lote.peso_inicial_qq} qq`,
-              tip: 'Quintales (qq): unidad de peso del café. 1 qq ≈ 46 kg. Es la unidad de compra estándar en Nicaragua y Centroamérica.',
+              tip: 'Unidad de compra estándar.',
             },
             {
               label: 'Precio/qq',
               value: `$${lote.precio_mercado_actual}`,
-              tip: 'Precio de mercado por quintal en USD. El rango internacional de café de especialidad es $240–$380/qq según calidad y variedad.',
+              tip: 'Precio base de negociación en USD.',
             },
             {
               label: 'Valor total',
-              value: valor,
-              tip: 'Estimado económico del lote = peso × precio/qq actual. Valor referencial; el precio final se negocia con el productor.',
+              value: valorFormateado,
+              tip: 'Valor comercial ajustado por penalizaciones de calidad (merma y humedad).',
             },
             {
               label: 'Humedad',
-              value: lote.humedad_actual ? `${lote.humedad_actual}%` : '—',
-              tip: '% de agua en el grano. Rango ideal: 10–12%. Sobre 14% = riesgo de hongos y pérdida de calidad. Bajo 10% = grano quebradizo.',
+              value: `${humedadActual.toFixed(1)}%`,
+              tip: 'Dato en tiempo real validado por IoT.',
             },
           ] as { label: string; value: string; tip: string }[]).map(s => (
             <div key={s.label} style={{
@@ -206,13 +221,13 @@ function LoteCard({ lote }: { lote: typeof mockLotes[0] }) {
         {/* Status */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span className={`badge ${lote.esta_activo ? 'badge-green' : 'badge-amber'}`}>
-            {lote.esta_activo ? <><span className="pulse-dot" style={{ width: 6, height: 6 }} /> En secado</> : '✓ Completado'}
+            {lote.esta_activo ? <><span className="pulse-dot" style={{ width: 6, height: 6 }} /> En proceso</> : '✓ Completado'}
           </span>
           <span style={{
             display: 'flex', alignItems: 'center', gap: '0.375rem',
             fontSize: '0.8rem', color: 'var(--green-400)', fontWeight: 600,
           }}>
-            Ver pasaporte
+            Auditar lote
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
           </span>
         </div>
@@ -223,7 +238,6 @@ function LoteCard({ lote }: { lote: typeof mockLotes[0] }) {
 
 export default function CompradorPage() {
   const lotesActivos = mockLotes.filter(l => l.esta_activo)
-  const lotesCompletados = mockLotes.filter(l => !l.esta_activo)
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -248,7 +262,7 @@ export default function CompradorPage() {
           </Link>
         </div>
         <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-          Marketplace de Café · Nicaragua
+          Marketplace · Modo Comprador
         </span>
       </nav>
 
@@ -261,26 +275,14 @@ export default function CompradorPage() {
       }}>
         <div className="fade-in">
           <span className="badge badge-green" style={{ marginBottom: '1.25rem', display: 'inline-flex' }}>
-            Calidad certificada por IoT
+            Calidad auditada por sensores
           </span>
           <h1 className="text-hero" style={{ marginBottom: '1rem', maxWidth: 560, margin: '0 auto 1rem' }}>
-            Comprá café de origen con datos reales
+            Compra café con trazabilidad técnica
           </h1>
           <p style={{ color: 'var(--text-muted)', maxWidth: 480, margin: '0 auto 2rem', lineHeight: 1.7 }}>
-            Cada lote tiene un Pasaporte Digital con temperatura, humedad y proceso de secado registrados en tiempo real desde sensores IoT en la finca.
+            El primer marketplace donde el pasaporte de calidad del grano es emitido automáticamente por sensores IoT, sin alteraciones humanas.
           </p>
-          <div style={{ display: 'flex', gap: '2rem', justifyContent: 'center' }}>
-            {[
-              { label: 'Lotes activos', value: lotesActivos.length },
-              { label: 'QQ disponibles', value: lotesActivos.reduce((s, l) => s + l.peso_inicial_qq, 0) },
-              { label: 'Precio promedio', value: `$${(mockLotes.reduce((s, l) => s + l.precio_mercado_actual, 0) / mockLotes.length).toFixed(0)}/qq` },
-            ].map(s => (
-              <div key={s.label} style={{ textAlign: 'center' }}>
-                <div style={{ fontWeight: 800, fontSize: '1.75rem', color: 'var(--green-400)' }}>{s.value}</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>{s.label}</div>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -289,23 +291,11 @@ export default function CompradorPage() {
         {lotesActivos.length > 0 && (
           <section className="fade-in fade-in-delay-1" style={{ marginBottom: '3rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-              <h2 style={{ fontWeight: 700, fontSize: '1.25rem' }}>Disponibles ahora</h2>
-              <span className="badge badge-green">{lotesActivos.length} lotes</span>
+              <h2 style={{ fontWeight: 700, fontSize: '1.25rem' }}>Lotes auditados en vivo</h2>
+              <span className="badge badge-green">{lotesActivos.length} disponibles</span>
             </div>
             <div className="grid-3">
               {lotesActivos.map(l => <LoteCard key={l.id} lote={l} />)}
-            </div>
-          </section>
-        )}
-
-        {lotesCompletados.length > 0 && (
-          <section className="fade-in fade-in-delay-2">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-              <h2 style={{ fontWeight: 700, fontSize: '1.25rem' }}>Lotes completados</h2>
-              <span className="badge badge-amber">{lotesCompletados.length} lotes</span>
-            </div>
-            <div className="grid-3">
-              {lotesCompletados.map(l => <LoteCard key={l.id} lote={l} />)}
             </div>
           </section>
         )}

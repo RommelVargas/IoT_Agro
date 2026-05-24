@@ -6,7 +6,6 @@ import {
 } from 'recharts'
 import { mockLotes, mockLecturasPerLote, mockAlertas, mockDispositivos, mockAgricultores, MOCK_SESSION_KEY } from '@/lib/mock-data'
 
-// ── Mini chart using SVG ──────────────────────────────────────────────────────
 function SparkLine({ data, color = 'var(--green-500)', height = 48 }: {
   data: number[], color?: string, height?: number
 }) {
@@ -21,7 +20,6 @@ function SparkLine({ data, color = 'var(--green-500)', height = 48 }: {
   )
 }
 
-// ── Metric card ───────────────────────────────────────────────────────────────
 function MetricCard({ label, value, unit, icon, color = 'var(--green-500)', trend, data }: {
   label: string, value: string | number, unit: string,
   icon: React.ReactNode, color?: string, trend?: string, data?: number[]
@@ -42,7 +40,6 @@ function MetricCard({ label, value, unit, icon, color = 'var(--green-500)', tren
   )
 }
 
-// ── Alert item ────────────────────────────────────────────────────────────────
 function AlertItem({ alerta }: { alerta: typeof mockAlertas[0] }) {
   const colors = {
     warning: { bg: 'var(--amber-glow)', border: 'rgba(245,158,11,0.3)', dot: '#f59e0b' },
@@ -68,7 +65,6 @@ function AlertItem({ alerta }: { alerta: typeof mockAlertas[0] }) {
   )
 }
 
-// ── Drying progress bar ───────────────────────────────────────────────────────
 function SecadoProgress({ lote, selected, onClick }: {
   lote: typeof mockLotes[0], selected: boolean, onClick: () => void
 }) {
@@ -102,7 +98,7 @@ function SecadoProgress({ lote, selected, onClick }: {
         <div style={{
           height: '100%', borderRadius: 100,
           background: color,
-          width: `${lote.progreso_secado}%`,
+          width: `${Math.min(lote.progreso_secado, 100)}%`,
           transition: 'width 1s ease',
         }} />
       </div>
@@ -114,19 +110,16 @@ function SecadoProgress({ lote, selected, onClick }: {
   )
 }
 
-// ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [tick, setTick] = useState(0)
   const [selectedLoteId, setSelectedLoteId] = useState(mockLotes[0].id)
   const [chartMetric, setChartMetric] = useState<'temp' | 'humedad'>('humedad')
+  const [agricultor, setAgricultor] = useState(mockAgricultores[0])
 
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 5000)
     return () => clearInterval(id)
   }, [])
-
-  // ── Agricultor logueado desde localStorage ─────────────────────────────────
-  const [agricultor, setAgricultor] = useState(mockAgricultores[0])
 
   useEffect(() => {
     const rawId = localStorage.getItem(MOCK_SESSION_KEY)
@@ -137,45 +130,46 @@ export default function DashboardPage() {
 
   const lecturas = mockLecturasPerLote[selectedLoteId] ?? mockLecturasPerLote[1]
   const selectedLote = mockLotes.find(l => l.id === selectedLoteId) ?? mockLotes[0]
-  
-  // Aquí es donde sucede la magia: tomamos la última lectura simulada
   const ultima = lecturas[lecturas.length - 1] 
 
   const tempData    = lecturas.map(l => Number(l.temp_ambiente.toFixed(1)))
   const humedadData = lecturas.map(l => Number(l.humedad_relativa.toFixed(1)))
   
-  // 🔥 PREPARAMOS LOS DATOS COMBINADOS PARA RECHARTS 🔥
-  const rechartsData = lecturas.map(l => {
-    let perdidaFisica = 0;
-    if (l.humedad_estimada < 12.0) {
-      perdidaFisica = (12.0 - l.humedad_estimada) * 850; 
-    }
-
-    let perdidaCalidad = 0;
-    if (l.lluvia && l.humedad_estimada > 12.5) {
-      perdidaCalidad = 3500; 
-    }
-
-    const dineroTotalPerdido = perdidaFisica + perdidaCalidad;
-
-    return {
-      hora: l.hora,
-      temp: Number(l.temp_ambiente.toFixed(1)),
-      humedad: Number(l.humedad_estimada.toFixed(1)), 
-      dinero: dineroTotalPerdido > 0 ? Number(dineroTotalPerdido.toFixed(2)) : 0
-    }
-  });
+  // EL FRONTEND AHORA SOLO CONSUME
+  const rechartsData = lecturas.map(l => ({
+    hora: l.hora,
+    temp: Number(l.temp_ambiente.toFixed(1)),
+    humedad: Number(l.humedad_estimada.toFixed(1)), 
+    dinero: Number(l.devaluacion.toFixed(2)) // Recibe el dato procesado matemáticamente
+  }));
 
   const chartColor  = chartMetric === 'temp' ? 'var(--amber)' : 'var(--blue)'
   const chartLabel  = chartMetric === 'temp' ? 'Temperatura vs Devaluación' : 'Humedad vs Devaluación'
   const unitLabel   = chartMetric === 'temp' ? '°C' : '%'
 
-  const totalQQ  = mockLotes.filter(l => l.esta_activo).reduce((s, l) => s + l.peso_inicial_qq, 0)
-  const valorUSD = mockLotes.filter(l => l.esta_activo).reduce((s, l) => s + l.peso_inicial_qq * l.precio_mercado_actual, 0)
+  // --- NUEVA MATEMÁTICA FINANCIERA GLOBAL ---
+  const lotesActivos = mockLotes.filter(l => l.esta_activo);
+  const totalQQ = lotesActivos.reduce((s, l) => s + l.peso_inicial_qq, 0);
+
+  let valorTeoricoGlobal = 0;
+  let valorRealGlobal = 0;
+
+  lotesActivos.forEach(lote => {
+    const teorico = lote.peso_inicial_qq * lote.precio_mercado_actual;
+    valorTeoricoGlobal += teorico;
+
+    // Buscamos la última lectura simulada de ESTE lote en particular
+    const lecturasLote = mockLecturasPerLote[lote.id] ?? mockLecturasPerLote[1];
+    const ultimaLec = lecturasLote[lecturasLote.length - 1];
+    
+    // Restamos la devaluación real calculada por el motor
+    valorRealGlobal += Math.max(0, teorico - ultimaLec.devaluacion);
+  });
+
+  const devaluacionTotal = valorTeoricoGlobal - valorRealGlobal;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Navbar */}
       <nav style={{
         padding: '1rem 2rem', display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', borderBottom: '1px solid var(--border)',
@@ -202,7 +196,6 @@ export default function DashboardPage() {
       </nav>
 
       <main style={{ flex: 1, padding: '1.5rem 2rem', maxWidth: 1280, width: '100%', margin: '0 auto' }}>
-        {/* Page title */}
         <div className="fade-in" style={{ marginBottom: '1.5rem' }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
             {agricultor.finca}
@@ -213,7 +206,6 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* KPI strip: reaccionan a la `ultima` lectura del lote seleccionado */}
         <div className="grid-4 fade-in fade-in-delay-1" style={{ marginBottom: '1.5rem' }}>
           <MetricCard
             label="Temperatura Ambiente"
@@ -221,7 +213,7 @@ export default function DashboardPage() {
             unit="°C"
             color="var(--amber)"
             data={tempData}
-            trend="↑ +1.2°C vs ayer"
+            trend="↑ Pico mediodía"
             icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>}
           />
           <MetricCard
@@ -230,29 +222,30 @@ export default function DashboardPage() {
             unit="%"
             color="var(--blue)"
             data={humedadData}
-            trend="↓ -3.4% vs ayer"
+            trend="Variación diaria activa"
             icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>}
           />
           <MetricCard
             label="Lotes en Secado"
-            value={mockLotes.filter(l => l.esta_activo).length}
+            value={lotesActivos.length}
             unit={`/ ${mockLotes.length}`}
             color="var(--green-400)"
             icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>}
           />
+          {/* TARJETA FINANCIERA ACTUALIZADA */}
           <MetricCard
-            label="Valor en Proceso"
-            value={`$${(valorUSD / 1000).toFixed(1)}k`}
+            label="Valor Neto Estimado"
+            value={`$${(valorRealGlobal / 1000).toFixed(1)}k`}
             unit="USD"
-            color="var(--green-500)"
-            trend={`${totalQQ.toFixed(0)} qq en proceso`}
+            color={devaluacionTotal > 0 ? "var(--amber)" : "var(--green-500)"}
+            trend={devaluacionTotal > 0 
+              ? `↓ Pérdida acumulada: $${(devaluacionTotal / 1000).toFixed(1)}k` 
+              : `Ideal: ${totalQQ.toFixed(0)} qq en proceso`}
             icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>}
           />
         </div>
 
-        {/* Main grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '1.5rem', alignItems: 'start' }}>
-          {/* Left */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
             <div className="card">
@@ -387,7 +380,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Dispositivos */}
             <div className="card">
               <h2 className="text-title" style={{ marginBottom: '1rem' }}>Dispositivos</h2>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -418,7 +410,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Right: alerts */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -430,7 +421,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Lluvia del lote seleccionado */}
             <div className="card" style={{
               textAlign: 'center',
               background: ultima.lluvia ? 'rgba(59,130,246,0.08)' : 'var(--bg-card)',
@@ -447,7 +437,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Pasaporte */}
             <Link href={`/agricultor/pasaporte/${selectedLoteId}`} style={{ display: 'block' }}>
               <div style={{
                 background: 'linear-gradient(135deg, var(--green-900), var(--bg-card))',

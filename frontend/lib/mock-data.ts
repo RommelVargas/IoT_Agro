@@ -53,8 +53,8 @@ export const mockLotes = [
     esta_activo: true,
     fecha_inicio: '2026-05-01T08:00:00Z',
     fecha_fin: null,
-    calidad: 'A',
-    humedad_actual: 10.5, // Coincide con la última lectura de sobre-secado
+    calidad: 'B',
+    humedad_actual: 9.5,
     temp_actual: 32.5,
     progreso_secado: 115,
   },
@@ -69,8 +69,8 @@ export const mockLotes = [
     fecha_inicio: '2026-05-05T08:00:00Z',
     fecha_fin: null,
     calidad: 'C', 
-    humedad_actual: 15.5, // Coincide con la lectura durante la lluvia
-    temp_actual: 24.1,    // Temperatura baja por la lluvia
+    humedad_actual: 15.5,
+    temp_actual: 24.1, 
     progreso_secado: 45,
   },
   {
@@ -84,7 +84,7 @@ export const mockLotes = [
     fecha_inicio: '2026-04-15T08:00:00Z',
     fecha_fin: '2026-05-10T16:00:00Z',
     calidad: 'A+',
-    humedad_actual: 11.8, // Ideal
+    humedad_actual: 11.8, 
     temp_actual: 26.5,
     progreso_secado: 100,
   },
@@ -99,48 +99,93 @@ function makeRng(seed: number) {
   }
 }
 
-// ── Lecturas por lote (Generador Lógico) ──────────────────────────────────────
+// ── Lecturas por lote (Generador Físico y Financiero REALISTA) ────────────────
 function genLecturas(
-  tempBase: number,
-  hrBase: number,
-  tempOffset: number,
-  lluviaRango: [number, number] | null,
-  seed: number,
-  humedadStart: number,
-  humedadEnd: number
+  tempBase: number, tempPeak: number, hrBase: number, hrDrop: number,
+  lluviaRango: [number, number] | null, seed: number, 
+  humedadStart: number, humedadTarget: number,
+  peso_inicial: number, precio_actual: number
 ) {
   const rng = makeRng(seed)
-  return Array.from({ length: 24 }, (_, i) => {
-    const progress = i / 23;
-    const baseHumedad = humedadStart - ((humedadStart - humedadEnd) * progress);
-    const isLluvia = lluviaRango ? i >= lluviaRango[0] && i <= lluviaRango[1] : false;
+  let currentHumedadGrano = humedadStart;
+  
+  // El lote empieza en perfecto estado. Solo se devalúa si pasa algo grave.
+  let factorCalidad = 1.00; 
 
-    // Consecuencias lógicas de la lluvia en el ambiente:
-    const extraHrLluvia = isLluvia ? 20 : 0; // La humedad relativa sube un 20%
-    const dropTempLluvia = isLluvia ? 5 : 0; // La temperatura cae 5 grados
+  return Array.from({ length: 24 }, (_, i) => {
+    const isLluvia = lluviaRango ? i >= lluviaRango[0] && i <= lluviaRango[1] : false;
+    
+    // Curva solar: pico a las 14:00 hrs
+    const factorSolar = Math.exp(-Math.pow((i - 14), 2) / 18);
+    
+    // Impacto de lluvia en el ambiente
+    const dropTempLluvia = isLluvia ? 5 + rng() * 2 : 0;
+    const extraHrLluvia = isLluvia ? 25 : 0;
+
+    const temp_ambiente = tempBase + (tempPeak * factorSolar) + rng() * 1.5 - dropTempLluvia;
+    let humedad_relativa = hrBase - (hrDrop * factorSolar) + rng() * 3 + extraHrLluvia;
+    if (humedad_relativa > 100) humedad_relativa = 100;
+
+    const temp_grano = temp_ambiente + (factorSolar * 4) + rng() - dropTempLluvia;
+
+    // Físicas de secado de la masa del grano
+    if (isLluvia) {
+      currentHumedadGrano += 0.15; // Reabsorbe agua por estar en la lluvia
+    } else {
+      const speed = Math.max(0.1, (temp_ambiente - 15) / 15);
+      const drop = ((humedadStart - humedadTarget) / 12) * speed;
+      currentHumedadGrano -= drop + (rng() * 0.05);
+    }
+
+    // --- CÁLCULO FINANCIERO CORREGIDO (EMPIEZA EN $0) ---
+    
+    // 1. Riesgo de fermentación: Sube drásticamente si está lloviendo sobre café húmedo
+    let riesgo = 5.0; 
+    if (isLluvia && currentHumedadGrano > 12.5) {
+      riesgo = 85.0; 
+    }
+
+    // 2. Daño a la Calidad (IRREVERSIBLE): Si se fermenta, baja de categoría para siempre
+    if (riesgo > 60.0 && factorCalidad > 0.85) {
+      factorCalidad = 0.85; // Se manchó, baja a Categoría B y pierde 15% de su valor
+    }
+
+    // 3. Pérdida de Masa (Temporal): Solo pierdes dinero si la humedad baja de 12%
+    let peso_actual = peso_inicial;
+    if (currentHumedadGrano < 12.0) {
+      const frac_ideal = 1.0 - 0.12;
+      const frac_actual = 1.0 - (currentHumedadGrano / 100.0);
+      peso_actual = peso_inicial * (frac_ideal / frac_actual);
+    }
+
+    // 4. Devaluación total (Debe empezar en 0 y solo subir por daño o sobresecado)
+    const valor_potencial_maximo = peso_inicial * precio_actual;
+    const valor_real_actual = peso_actual * (precio_actual * factorCalidad);
+    const devaluacion = Math.max(0, valor_potencial_maximo - valor_real_actual);
 
     return {
       id: i + 1,
       hora: `${String(i).padStart(2, '0')}:00`,
-      temp_ambiente: tempBase + Math.sin(i * 0.3 + tempOffset) * 5 + rng() * 2 - dropTempLluvia,
-      humedad_relativa: hrBase + Math.cos(i * 0.25 + tempOffset) * 12 + rng() * 3 + extraHrLluvia,
-      temp_grano: tempBase + 4 + Math.sin(i * 0.3 + 1) * 4 + rng() * 1.5 - dropTempLluvia,
-      humedad_estimada: baseHumedad + rng() * 0.4,
+      temp_ambiente,
+      humedad_relativa,
+      temp_grano,
+      humedad_estimada: currentHumedadGrano,
       lluvia: isLluvia,
       voltaje_bateria: 3.8 - i * 0.01,
+      devaluacion 
     }
   })
 }
 
 export const mockLecturasPerLote: Record<number, ReturnType<typeof genLecturas>> = {
-  // Lote 1: Sobre-secado. Sin lluvia.
-  1: genLecturas(28, 55, 0, null, 42, 14.5, 10.5),
+  // Lote 1: Sobre-secado. Día caliente, baja hasta el 9.5%.
+  1: genLecturas(18, 16, 90, 45, null, 42, 14.5, 9.5, 120.5, 280.0),
   
-  // Lote 2: Fermentación. Llueve "ahorita mismo" (horas 19 a 23).
-  2: genLecturas(31, 62, 1.5, [19, 23], 77, 18.0, 15.5),
+  // Lote 2: Fermentación. Lluvia fuerte de 14:00 a 18:00 hrs.
+  2: genLecturas(17, 14, 92, 40, [14, 18], 77, 16.5, 11.5, 85.0, 310.0),
   
-  // Lote 3: Ideal.
-  3: genLecturas(26, 48, 3.0, null, 13, 12.2, 11.8),
+  // Lote 3: Ideal. Día estable, secado perfecto.
+  3: genLecturas(19, 11, 85, 35, null, 13, 13.5, 11.8, 60.0, 340.0),
 }
 
 export const mockLecturas = mockLecturasPerLote[1]
@@ -173,8 +218,30 @@ export const mockAlertas = [
   },
 ]
 
+// ── Dispositivos ──────────────────────────────────────────────────────────────
 export const mockDispositivos = [
-  { id: 1, nombre_alias: 'Estaca Secador 1', mac: 'AA:BB:CC:DD:EE:01', activo: true,  bateria: 85, rssi: -62 },
-  { id: 2, nombre_alias: 'Estaca Secador 2', mac: 'AA:BB:CC:DD:EE:02', activo: true,  bateria: 42, rssi: -75 },
-  { id: 3, nombre_alias: 'Sensor Patio Norte', mac: 'AA:BB:CC:DD:EE:03', activo: false, bateria: 12, rssi: -91 },
+  {
+    id: 1,
+    nombre_alias: 'Estaca Secador 1',
+    mac: 'AA:BB:CC:DD:EE:01',
+    activo: true,
+    bateria: 85,
+    rssi: -62,
+  },
+  {
+    id: 2,
+    nombre_alias: 'Estaca Secador 2',
+    mac: 'AA:BB:CC:DD:EE:02',
+    activo: true,
+    bateria: 42,
+    rssi: -75,
+  },
+  {
+    id: 3,
+    nombre_alias: 'Sensor Patio Norte',
+    mac: 'AA:BB:CC:DD:EE:03',
+    activo: false,
+    bateria: 12,
+    rssi: -91,
+  },
 ]

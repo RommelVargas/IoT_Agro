@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import { mockLotes, mockLecturas } from '@/lib/mock-data'
+import { mockLotes, mockLecturasPerLote } from '@/lib/mock-data'
 import { use } from 'react'
 
 function VerifiedRow({ label, value }: { label: string; value: string }) {
@@ -49,12 +49,37 @@ function QRCode({ seed = '' }: { seed?: string }) {
 
 export default function AgricultorPasaportePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const lote = mockLotes.find(l => l.id === parseInt(id)) ?? mockLotes[0]
-  const ultimas = mockLecturas.slice(-6)
+  const loteId = parseInt(id)
+  
+  // 1. Buscamos el lote específico seleccionado
+  const lote = mockLotes.find(l => l.id === loteId) ?? mockLotes[0]
+  
+  // 2. Extraemos el arreglo de lecturas dinámicas correspondientes a ESTE lote
+  const lecturasLote = mockLecturasPerLote[lote.id] ?? mockLecturasPerLote[1]
+  
+  // Tomamos las últimas muestras para la tabla de abajo y la última lectura absoluta
+  const ultimas = lecturasLote.slice(-6)
+  const ultimaLectura = lecturasLote[lecturasLote.length - 1]
 
-  const minTemp = Math.min(...mockLecturas.map(l => l.temp_ambiente)).toFixed(1)
-  const maxTemp = Math.max(...mockLecturas.map(l => l.temp_ambiente)).toFixed(1)
-  const avgHR   = (mockLecturas.reduce((s, l) => s + l.humedad_relativa, 0) / mockLecturas.length).toFixed(1)
+  // 3. Los KPI estadísticos ahora se calculan dinámicamente con la física de este lote
+  const minTemp = Math.min(...lecturasLote.map(l => l.temp_ambiente)).toFixed(1)
+  const maxTemp = Math.max(...lecturasLote.map(l => l.temp_ambiente)).toFixed(1)
+  const avgHR   = (lecturasLote.reduce((s, l) => s + l.humedad_relativa, 0) / lecturasLote.length).toFixed(1)
+
+  // 4. Mapeamos la calidad final real basada en la humedad final de la simulación
+  const humedadFinal = ultimaLectura.humedad_estimada
+  let calidadDinamica = "C"
+  if (humedadFinal >= 11.0 && humedadFinal <= 12.2) {
+    calidadDinamica = "A+"
+  } else if (humedadFinal >= 10.5 && humedadFinal <= 12.5) {
+    calidadDinamica = "A"
+  } else if (humedadFinal >= 9.5 && humedadFinal <= 13.5) {
+    calidadDinamica = "B"
+  }
+
+  // 5. Ajustamos el valor financiero final restándole la devaluación real del motor
+  const valorTotalTeorico = lote.peso_inicial_qq * lote.precio_mercado_actual
+  const valorTotalReal = Math.max(0, valorTotalTeorico - ultimaLectura.devaluacion)
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -77,7 +102,6 @@ export default function AgricultorPasaportePage({ params }: { params: Promise<{ 
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>
             Certificado verificado
           </span>
-          {/* Link to public buyer view */}
           <Link
             href={`/comprador/lotes/${id}`}
             target="_blank"
@@ -161,7 +185,7 @@ export default function AgricultorPasaportePage({ params }: { params: Promise<{ 
 
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                 <span className="badge badge-green" style={{ fontSize: '0.8rem' }}>
-                  Calidad {lote.calidad}
+                  Calidad {calidadDinamica}
                 </span>
                 <span className={`badge ${lote.esta_activo ? 'badge-green' : 'badge-amber'}`} style={{ fontSize: '0.8rem' }}>
                   {lote.esta_activo ? '● En proceso' : '✓ Completado'}
@@ -191,7 +215,7 @@ export default function AgricultorPasaportePage({ params }: { params: Promise<{ 
             <VerifiedRow label="Variedad" value={lote.variedad} />
             <VerifiedRow label="Peso inicial" value={`${lote.peso_inicial_qq} quintales`} />
             <VerifiedRow label="Precio por quintal" value={`$${lote.precio_mercado_actual} USD`} />
-            <VerifiedRow label="Valor total estimado" value={`$${(lote.peso_inicial_qq * lote.precio_mercado_actual).toLocaleString()} USD`} />
+            <VerifiedRow label="Valor comercial real" value={`$${valorTotalReal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`} />
             <VerifiedRow label="Fecha de inicio" value={new Date(lote.fecha_inicio).toLocaleDateString('es-NI')} />
           </div>
 
@@ -201,9 +225,9 @@ export default function AgricultorPasaportePage({ params }: { params: Promise<{ 
             <VerifiedRow label="Temp. mínima registrada" value={`${minTemp}°C`} />
             <VerifiedRow label="Temp. máxima registrada" value={`${maxTemp}°C`} />
             <VerifiedRow label="Humedad relativa promedio" value={`${avgHR}%`} />
-            <VerifiedRow label="Humedad del grano actual" value={`${lote.humedad_actual}%`} />
+            <VerifiedRow label="Humedad del grano actual" value={`${humedadFinal.toFixed(1)}%`} />
             <VerifiedRow label="Progreso de secado" value={`${lote.progreso_secado}%`} />
-            <VerifiedRow label="Lecturas registradas" value={`${mockLecturas.length.toLocaleString()} muestras`} />
+            <VerifiedRow label="Lecturas registradas" value={`${lecturasLote.length.toLocaleString()} muestras`} />
           </div>
         </div>
 
